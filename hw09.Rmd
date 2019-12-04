@@ -221,7 +221,7 @@ wordcloud(words = tidy_word_cloud$word, freq = tidy_word_cloud$n, min.freq = 1,
 # wordcloud2(tidy_word_cloud, size = 2, figPath = "jail7.jpg",  widgetsize = c(458, 458), color = "skyblue", backgroundColor="black")
 ```
 
-This project also uses additional approach to plot wordcloud (using wordcloud2), but wordcloud2 is only supported in html format, so I saved the plot from rmarkdown and pasted it here:
+This project also uses additional approach to plot wordcloud (using wordcloud2), but wordcloud2 is only supported in html format, so I saved the plot from rmarkdown and pasted it below. Notice that the word "love" is not shown in this wordcloud, due to the constrain of the size wordcloud2 supports ("love" has big size due to its high frequency, and it was omitted in this plot).
 
 <p> 
 ![image1](wordcloud2.jpg){width=300px}  
