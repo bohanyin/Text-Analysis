@@ -1,0 +1,247 @@
+---
+title: "hw_09: Exploring final statements of death row offenders in Texas"
+author: "Bohan Yin"
+date: "12/2/2019"
+output: 
+  pdf_document: 
+      toc: yes
+      toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+### load packages
+library(rvest)
+library(tidyverse)
+library(stringi)
+library(stringr)
+library(tidytext)
+library(topicmodels)
+library(wordcloud)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+
+\pagebreak  
+
+## Introduction
+
+**"Any last words?"**
+
+It's a question prisoners on death row hear before their execution begins. Along with last meals and long cell block walks, the opportunity to give a final statement has become deeply ingrained in the highly ritualized process of executing prisoners. Most prisoners take the opportunity to pause for a second, thinking back their whole life, and make a final statement. The content of these messages range from expressions of guilt and sorrow to resentments and angers. With the puropose of examining the final thoughts of death row prisoners before their execution begins, this project uses data composed of last statements by Texas death row inmates from 1982 to 2019, and the data comes from [Texas Department of Criminal Justice](https://www.tdcj.texas.gov/death_row/dr_executed_offenders.html), and performs text analysis based on these data. Typically, sentiment analysis, topic modeling and wordcloud are applied.
+
+<p> 
+![image1](jail1.jpg){width=500px}  
+</p> 
+
+## About data
+The data on the website is not tidy enough for text analysis. On the website you will find a table containing information of prisoners on death row, including their age, race, name and last statement But the "last statement" column wraps each last statement in a link, which means that the user needs to click the links manually to jump to a new page if they want to read the actual last statements. I could not find a way to edit the code so that it will download both the table and last statements at once, so I downloaded both seperately and merge them together after some modification. There are also some limitation about the data, which will be discussed in the last part of this project.
+
+```{r readin}
+########################
+### Data Preparation ###
+########################
+
+# read html
+ls <- xml2::read_html('https://www.tdcj.texas.gov/death_row/dr_executed_offenders.html')
+url <- ls %>%
+  # only choose last statements link
+  html_nodes("td~ td+ td a") %>%
+  html_attr("href")
+url <- as.list(url)
+```
+
+
+```{r last statement, include=FALSE}
+# get prinsoners last statements
+output <- vector(mode = "character", length = length(url))
+counter <- 0
+for (i in url) {
+  # count the process
+  counter <- counter + 1
+  print(paste("dealing with page:", i, counter))
+  text <- paste('NA', counter)
+  tryCatch({ # some of the prisoners information are removed,  so the page no longer exists. We use tryCatch to ignore those problems 
+      text <- xml2::read_html(paste('https://www.tdcj.texas.gov/death_row/',i, sep = '')) %>%
+          html_nodes("p:nth-child(11)") %>%
+        # get raw text of their words
+          html_text()
+      # some prisoners said nothing so we assign None to their final statement
+      if (length(text)==0){
+        text <- 'None'
+      }
+  }, error = function(e) {
+      print(paste("page ", i, " not found"))
+  })
+  output[counter] <- text
+}
+
+statement_df <- as_tibble(output)
+# create a row indicating the order for further use
+statement_df$id <-  seq.int(nrow(statement_df))
+statement_df <- statement_df %>% 
+  # change this order so it can merge with the general data correctly
+  arrange(desc(id))
+# this is the execution order
+statement_df$Execution <- seq.int(nrow(statement_df))
+statement_df <- within(statement_df, rm(id))  
+```
+
+```{r general info}
+# get general information of prisoners
+tables <- html_nodes(ls, css = "table")
+tables1 <- tables %>%
+  # get the first table
+  nth(1) %>%
+  # convert to data frame
+  html_table(header = TRUE)
+
+```
+
+```{r merge and tokenize}
+# merge final statement and general information together
+final_statement <- merge(statement_df, tables1, by = 'Execution') %>%
+  rename(last_statement = `value`)
+
+# split into words
+final_statement_word <- final_statement %>%
+  unnest_tokens(output = word,
+                 input = last_statement)
+```
+
+## Text Analysis
+
+### Sentiment Analysis
+
+The first method to perform text analysis is evaluating the opinion or emotion in text using sentiment analysis. Through that we can get some insight about what moods these prisoners had on the very last moment of their life. Figure 1 presents the result splitted by race. The x axis labelled "Execution order" indicates the order number of each execution, ranging from 1 to 566 (1 as the earliest execution in 1982 and 566 as the latest one in 2019). In general, there is no significant of change in sentiments as the time passing by. All prisoners present more positive sentiment than negative one. In particular, Hispanic prisners present the most positive sentiment in their last statements, and the highest sentiment index lays in this category. There are only a few negative sentiments in Hispanic categories. Black and white prisoners present relatively more negative sentiments compared to Hispanic prisoners. 
+
+```{r sentiment}
+##########################
+### Sentiment analysis ###
+##########################
+
+final_statement_sentiment <- final_statement_word %>%
+  # remove stop words
+  anti_join(stop_words, by = 'word') %>%
+  # get sentiment analysis words
+  inner_join(get_sentiments("bing")) %>%
+  count(Execution, Race, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+library(ggplot2)
+
+ggplot(final_statement_sentiment, aes(Execution, sentiment, fill = Race)) +
+  # here we don't need legend because categories indicated in each subplots
+  geom_col(show.legend = FALSE) +
+  labs(title = 'Figure1: Sentiments of death row prisoners',
+       x = 'Execution order') +
+  facet_wrap(~Race, ncol = 2, scales = "free_x")
+```
+
+
+### Topic modeling
+
+The second approach is perform topic modeling through Latent Dirichlet allocation (LDA). Last statement texts are broken down to tokens and construct to a matrix, allowing the code to do topic modeling. Figure 2 lets us understand the four topics that were extracted from the texts. The most common words in topic 1 include “love”, “family”, “god”, "hope" and “forgive”, which suggests it may represent the mood category of being emotional. Those most common in topic 2 include “love”, “family”,  “god”, "lord" and “life”, which is pretty much similar with topic 1. Similarity also applies to topic 3 and 4. One important observation about the words in each topic is that some words, such as “love” and “family”, are shared across 4  topics. The topic modeling does not perform well in differenciating topics, as each topic has similar top words.
+
+```{r topic modeling}
+######################
+### Topic modeling ###
+######################
+
+tidy_word <- final_statement_word %>%
+    anti_join(stop_words, by = 'word') %>%
+    count(Race, word, sort = TRUE) %>%
+    ungroup()
+fs_dtm <- tidy_word %>%
+  cast_dtm(Race, word, n)
+
+fs_lda <- LDA(fs_dtm, k = 4, control = list(seed = 123))
+fs_lda_td <- tidy(fs_lda)
+
+top_terms <- fs_lda_td %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms %>%
+  mutate(topic = factor(topic),
+         term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = topic)) +
+  geom_bar(alpha = 0.8, stat = "identity", show.legend = FALSE) +
+  scale_x_reordered() +
+  labs(title = 'Figure 2: Top terms per topic',
+       y = 'Probabilities of each term'
+  )+
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+```
+
+
+### Word Frequency
+
+A wordcloud is used in this project to find the most frequently used words in the text and visualize them. First, let's take a look at what words are used most frequently in the final statements. From the following table we can see, the most frequent word existed in death row prisoners' final statement is **love**, followed by **family**, **god**.  
+
+```{r wordcloud}
+#################
+### Wordcloud ###
+#################
+
+tidy_word_cloud <- final_statement_word %>%
+    anti_join(stop_words, by = 'word') %>%
+    count(word, sort = TRUE) 
+# select top 10 words
+tidy_word_cloud %>%
+  top_n(10) %>%
+  kable(caption = "Top 10 words appeared in last statements") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+```
+
+### Wordcloud
+
+Making it to a wordcloud, we can get a more intuitive view.
+
+```{r}
+set.seed(1023)
+wordcloud(words = tidy_word_cloud$word, freq = tidy_word_cloud$n, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+
+### Wordcloud2
+
+```{r}
+# This plot generates a fancier wordcloud, but it is only supported in html file, so if you have time you can convert this rmd to html file to see the plot and run the following code:
+# library(wordcloud2)
+# wordcloud2(tidy_word_cloud, size = 2, figPath = "jail7.jpg",  widgetsize = c(458, 458), color = "skyblue", backgroundColor="black")
+```
+
+This project also uses additional approach to plot wordcloud (using wordcloud2), but wordcloud2 is only supported in html format, so I saved the plot from rmarkdown and pasted it here:
+
+<p> 
+![image1](wordcloud2.jpg){width=300px}  
+<p> 
+
+
+## Conclusion
+
+This project performs text analysis on the last statements made by death rown prisoners in Texas, with approaches of sentiment analysis, topic modeling, and wordcloud. The result shows that in general these prisoners tend to express regretful and emotional sentiments when making their last statements. Most common overall are words of regret and personal statements, usually concerning their family, such as "I love you," or references to being in a better place. It's an oddly one-sided view of men who have been convicted of horrible crimes.
+
+## Limitation
+
+The data this project uses is not big, which means that the analysis might not be comprehensive enough. 
+
+## Reference
+[https://www.discovermagazine.com/mind/final-words-on-death-row-an-analysis](https://www.discovermagazine.com/mind/final-words-on-death-row-an-analysis)
+
+
+```{r include = FALSE}
+devtools::session_info()
+``` 
+
+
