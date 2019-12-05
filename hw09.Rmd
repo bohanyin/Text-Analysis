@@ -230,7 +230,7 @@ This project also uses additional approach to plot wordcloud (using wordcloud2),
 
 ## Conclusion
 
-This project performs text analysis on the last statements made by death rown prisoners in Texas, with approaches of sentiment analysis, topic modeling, and wordcloud. The result shows that in general these prisoners tend to express regretful and emotional sentiments when making their last statements. Most common overall are words of regret and personal statements, usually concerning their family, such as "I love you," or references to being in a better place. It's an oddly one-sided view of men who have been convicted of horrible crimes.
+This project performs text analysis on the last statements made by death rown prisoners in Texas, with approaches of sentiment analysis, topic modeling, and wordcloud. The result shows that in general these prisoners tend to express regretful and emotional sentiments when making their last statements. Most common overall are words of regret and personal statements, usually concerning their family, such as "I love you," or references to being in a better place. It's an oddly one-sided view of men who have been convicted of horrible crimes. It also fits an old saying in Chinese: "A man's words are kind when death is close."
 
 ## Limitation
 
