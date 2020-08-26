@@ -1,9 +1,6 @@
-# hw09
-Author: Bohan Yin
+## Text Analysis Description
 
-## Assignment Description
-
-Thanks for reviewing my homework! 
+Thanks for reviewing my work! 
 
 With the puropose of examining the final thoughts of death row prisoners before their execution begins, this assignment uses the data composed of final statements by Texas death row inmates from 1982 to 2019, and the data comes from [Texas Department of Criminal Justice](https://www.tdcj.texas.gov/death_row/dr_executed_offenders.html). The assignment performs text analysis based on these data. Typically, sentiment analysis, topic modeling and wordcloud are applied.
 
