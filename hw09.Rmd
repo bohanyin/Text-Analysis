@@ -1,5 +1,5 @@
 ---
-title: "hw_09: Exploring final statements of death row offenders in Texas"
+title: "Exploring final statements of death row offenders in Texas"
 author: "Bohan Yin"
 date: "12/2/2019"
 output: 
